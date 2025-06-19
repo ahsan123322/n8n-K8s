@@ -1,0 +1,195 @@
+# Simplified prod setup with internal Redis and external PostgreSQL
+# Following 8gears/n8n-helm-chart standard format v1.0.0+
+
+image:
+  repository: 8gears.container-registry.com/ops/n8n
+  tag: 1.81.4
+imagePullSecrets:
+  - name: 8gears-registry-n8n
+
+# Global node selector for all components
+nodeSelector:
+  server: n8n
+
+# Enable scaling for queue mode with webhook instances
+scaling:
+  enabled: true
+  worker:
+    replicaCount: 3
+  webhook:
+    enabled: true
+    replicaCount: 1
+
+# Enable INTERNAL Redis configuration
+redis:
+  enabled: true  # This enables the internal Redis server
+  # No need to specify host/password - handled automatically by the chart
+
+# Disable external Valkey/Redis since using internal
+valkey:
+  enabled: false
+
+# Worker configuration - simplified since Redis is internal
+worker:
+  enabled: true
+  nodeSelector:
+    server: n8n
+  resources:
+    limits:
+      memory: 1536Mi
+    requests:
+      memory: 256Mi
+  # Worker config - queue mode will use internal Redis automatically
+  config:
+    executions:
+      mode: queue
+
+# Webhook configuration - simplified
+webhook:
+  enabled: true
+  nodeSelector:
+    server: n8n
+  resources:
+    limits:
+      memory: 1024Mi
+    requests:
+      memory: 256Mi
+  # Webhook config - queue mode will use internal Redis automatically
+  config:
+    executions:
+      mode: queue
+
+# Main n8n instance configuration
+main:
+  config:
+    # Database configuration - only PostgreSQL external
+    db:
+      type: postgresdb
+      postgresdb:
+        host: postgres-service
+        port: 5432
+        user: n8n
+        password: n8n_password
+        database: n8n
+        pool:
+          max: 10
+        ssl:
+          enabled: false
+    
+    # Queue configuration - Redis connection handled automatically
+    executions:
+      mode: queue
+    
+    # Security
+    security:
+      audit:
+        daysAbandonedWorkflow: 90
+  
+  # Secrets configuration
+  secret:
+    n8n:
+      encryption_key: "your-secure-encryption-key-here"
+  
+  # Resource limits
+  resources:
+    limits:
+      memory: 2048Mi
+    requests:
+      memory: 512Mi
+  
+  # Node selector
+  nodeSelector:
+    server: n8n
+  
+  # Service configuration with NodePort
+  service:
+    type: NodePort
+    port: 5678
+    nodePort: 30200
+
+# Disable ingress for local setup
+ingress:
+  enabled: false
+
+# External dependencies - ONLY PostgreSQL now
+extraManifests:
+  # PostgreSQL database
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: postgres
+      labels:
+        app: postgres
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: postgres
+      template:
+        metadata:
+          labels:
+            app: postgres
+        spec:
+          nodeSelector:
+            server: n8n
+          containers:
+          - name: postgres
+            image: postgres:15
+            env:
+            - name: POSTGRES_DB
+              value: n8n
+            - name: POSTGRES_USER
+              value: n8n
+            - name: POSTGRES_PASSWORD
+              value: n8n_password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            ports:
+            - containerPort: 5432
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "200m"
+              limits:
+                memory: "1Gi"
+                cpu: "1000m"
+            volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+            livenessProbe:
+              exec:
+                command:
+                - pg_isready
+                - -U
+                - n8n
+                - -d
+                - n8n
+              initialDelaySeconds: 30
+              periodSeconds: 10
+            readinessProbe:
+              exec:
+                command:
+                - pg_isready
+                - -U
+                - n8n
+                - -d
+                - n8n
+              initialDelaySeconds: 5
+              periodSeconds: 5
+          volumes:
+          - name: postgres-storage
+            emptyDir: {}
+  
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: postgres-service
+      labels:
+        app: postgres
+    spec:
+      selector:
+        app: postgres
+      ports:
+      - port: 5432
+        targetPort: 5432
+        protocol: TCP
