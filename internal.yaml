@@ -1,11 +1,11 @@
 # Simplified setup with internal Redis only
 # Following 8gears/n8n-helm-chart standard format v1.0.0+
 
-image:
-  repository: 8gears.container-registry.com/ops/n8n
-  tag: 1.81.4
-imagePullSecrets:
-  - name: 8gears-registry-n8n
+# image:
+#   repository: 8gears.container-registry.com/ops/n8n
+#   tag: 1.81.4
+# imagePullSecrets:
+#   - name: 8gears-registry-n8n
 
 # Global node selector for all components
 nodeSelector:
