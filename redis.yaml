@@ -1,13 +1,16 @@
 # Simplified prod setup with standard PostgreSQL and NodePort
 # Following 8gears/n8n-helm-chart standard format
+
 image:
   repository: 8gears.container-registry.com/ops/n8n
   tag: 1.81.4
 imagePullSecrets:
   - name: 8gears-registry-n8n
+
 # Global node selector for all components
 nodeSelector:
   server: n8n
+
 # Enable scaling for queue mode with webhook instances
 scaling:
   enabled: true
@@ -20,6 +23,7 @@ scaling:
   redis:
     host: "redis-hostname"
     password: "redis-password-if-set"
+
 # Worker configuration (inherits from main but can override)
 worker:
   enabled: true
@@ -30,6 +34,7 @@ worker:
       memory: 1536Mi
     requests:
       memory: 256Mi
+
 # Webhook configuration (inherits from main but can override)
 webhook:
   enabled: true
@@ -40,9 +45,11 @@ webhook:
       memory: 1024Mi
     requests:
       memory: 256Mi
+
 # Enable internal Valkey/Redis server for queue
 valkey:
   enabled: false
+
 main:
   config:
     db:
@@ -59,25 +66,27 @@ main:
   secret:
     n8n:
       encryption_key: "your-secure-encryption-key-here"
-
+  
   resources:
     limits:
       memory: 2048Mi
     requests:
       memory: 512Mi
-
+  
   # Apply node selector to main pods
   nodeSelector:
     server: n8n
-
+  
   # Service configuration with NodePort for direct access
   service:
     type: NodePort
     port: 5678
     nodePort: 30200
+
 # Disable ingress for local setup
 ingress:
   enabled: false
+
 # External Redis deployment manifest
 extraManifests:
   # Redis server for external queue management
@@ -115,6 +124,7 @@ extraManifests:
           volumes:
           - name: redis-storage
             emptyDir: {}
+
   - apiVersion: v1
     kind: Service
     metadata:
@@ -125,6 +135,7 @@ extraManifests:
       ports:
       - port: 6379
         targetPort: 6379
+
   # PostgreSQL database
   - apiVersion: apps/v1
     kind: Deployment
@@ -163,8 +174,8 @@ extraManifests:
           volumes:
           - name: postgres-storage
             emptyDir: {}
-
- - apiVersion: v1
+  
+  - apiVersion: v1
     kind: Service
     metadata:
       name: postgres-service
