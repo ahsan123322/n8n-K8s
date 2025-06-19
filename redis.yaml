@@ -1,5 +1,5 @@
 # Simplified prod setup with standard PostgreSQL and NodePort
-# Following 8gears/n8n-helm-chart standard format
+# Following 8gears/n8n-helm-chart standard format v1.0.0+
 
 image:
   repository: 8gears.container-registry.com/ops/n8n
@@ -19,12 +19,14 @@ scaling:
   webhook:
     enabled: true
     replicaCount: 1
-  # For external Redis (if you prefer)
-  redis:
-    host: "redis-hostname"
-    password: "redis-password-if-set"
 
-# Worker configuration (inherits from main but can override)
+# External Redis configuration
+redis:
+  host: "redis-hostname"
+  password: "redis-password-if-set"
+  port: 6379
+
+# Worker configuration - corrected structure
 worker:
   enabled: true
   nodeSelector:
@@ -34,8 +36,18 @@ worker:
       memory: 1536Mi
     requests:
       memory: 256Mi
+  # Worker-specific config as map, not array
+  config:
+    executions:
+      mode: queue
+    queue:
+      bull:
+        redis:
+          host: redis-hostname
+          port: 6379
+          password: redis-password-if-set
 
-# Webhook configuration (inherits from main but can override)
+# Webhook configuration - corrected structure  
 webhook:
   enabled: true
   nodeSelector:
@@ -45,39 +57,70 @@ webhook:
       memory: 1024Mi
     requests:
       memory: 256Mi
+  # Webhook-specific config as map
+  config:
+    executions:
+      mode: queue
+    queue:
+      bull:
+        redis:
+          host: redis-hostname
+          port: 6379
+          password: redis-password-if-set
 
-# Enable internal Valkey/Redis server for queue
+# Disable internal Valkey/Redis since using external
 valkey:
   enabled: false
 
+# Main n8n instance configuration
 main:
   config:
+    # Database configuration
     db:
       type: postgresdb
       postgresdb:
         host: postgres-service
+        port: 5432
         user: n8n
         password: n8n_password
         database: n8n
         pool:
-          size: 10
+          max: 10
         ssl:
           enabled: false
+    
+    # Queue configuration for main instance
+    executions:
+      mode: queue
+    queue:
+      bull:
+        redis:
+          host: redis-hostname
+          port: 6379
+          password: redis-password-if-set
+    
+    # Security
+    security:
+      audit:
+        daysAbandonedWorkflow: 90
+  
+  # Secrets configuration
   secret:
     n8n:
       encryption_key: "your-secure-encryption-key-here"
   
+  # Resource limits
   resources:
     limits:
       memory: 2048Mi
     requests:
       memory: 512Mi
   
-  # Apply node selector to main pods
+  # Node selector
   nodeSelector:
     server: n8n
   
-  # Service configuration with NodePort for direct access
+  # Service configuration with NodePort
   service:
     type: NodePort
     port: 5678
@@ -87,13 +130,15 @@ main:
 ingress:
   enabled: false
 
-# External Redis deployment manifest
+# External dependencies via extraManifests
 extraManifests:
-  # Redis server for external queue management
+  # Redis server for queue management
   - apiVersion: apps/v1
     kind: Deployment
     metadata:
       name: redis-external
+      labels:
+        app: redis-external
     spec:
       replicas: 1
       selector:
@@ -104,6 +149,8 @@ extraManifests:
           labels:
             app: redis-external
         spec:
+          nodeSelector:
+            server: n8n
           containers:
           - name: redis
             image: redis:7-alpine
@@ -111,16 +158,40 @@ extraManifests:
             - redis-server
             - --requirepass
             - redis-password-if-set
+            - --appendonly
+            - "yes"
             ports:
             - containerPort: 6379
             resources:
               requests:
                 memory: "256Mi"
+                cpu: "100m"
               limits:
                 memory: "512Mi"
+                cpu: "500m"
             volumeMounts:
             - name: redis-storage
               mountPath: /data
+            livenessProbe:
+              exec:
+                command:
+                - redis-cli
+                - --no-auth-warning
+                - -a
+                - redis-password-if-set
+                - ping
+              initialDelaySeconds: 30
+              periodSeconds: 10
+            readinessProbe:
+              exec:
+                command:
+                - redis-cli
+                - --no-auth-warning
+                - -a
+                - redis-password-if-set
+                - ping
+              initialDelaySeconds: 5
+              periodSeconds: 5
           volumes:
           - name: redis-storage
             emptyDir: {}
@@ -129,18 +200,23 @@ extraManifests:
     kind: Service
     metadata:
       name: redis-hostname
+      labels:
+        app: redis-external
     spec:
       selector:
         app: redis-external
       ports:
       - port: 6379
         targetPort: 6379
+        protocol: TCP
 
   # PostgreSQL database
   - apiVersion: apps/v1
     kind: Deployment
     metadata:
       name: postgres
+      labels:
+        app: postgres
     spec:
       replicas: 1
       selector:
@@ -151,6 +227,8 @@ extraManifests:
           labels:
             app: postgres
         spec:
+          nodeSelector:
+            server: n8n
           containers:
           - name: postgres
             image: postgres:15
@@ -161,16 +239,40 @@ extraManifests:
               value: n8n
             - name: POSTGRES_PASSWORD
               value: n8n_password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
             ports:
             - containerPort: 5432
             resources:
               requests:
                 memory: "512Mi"
+                cpu: "200m"
               limits:
-                memory: "512Mi"
+                memory: "1Gi"
+                cpu: "1000m"
             volumeMounts:
             - name: postgres-storage
               mountPath: /var/lib/postgresql/data
+            livenessProbe:
+              exec:
+                command:
+                - pg_isready
+                - -U
+                - n8n
+                - -d
+                - n8n
+              initialDelaySeconds: 30
+              periodSeconds: 10
+            readinessProbe:
+              exec:
+                command:
+                - pg_isready
+                - -U
+                - n8n
+                - -d
+                - n8n
+              initialDelaySeconds: 5
+              periodSeconds: 5
           volumes:
           - name: postgres-storage
             emptyDir: {}
@@ -179,9 +281,12 @@ extraManifests:
     kind: Service
     metadata:
       name: postgres-service
+      labels:
+        app: postgres
     spec:
       selector:
         app: postgres
       ports:
       - port: 5432
         targetPort: 5432
+        protocol: TCP
