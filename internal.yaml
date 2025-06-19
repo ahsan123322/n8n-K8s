@@ -1,11 +1,11 @@
 # Simplified setup with internal Redis only
 # Following 8gears/n8n-helm-chart standard format v1.0.0+
 
-# image:
-#   repository: 8gears.container-registry.com/ops/n8n
-#   tag: 1.81.4
-# imagePullSecrets:
-#   - name: 8gears-registry-n8n
+image:
+  repository: 8gears.container-registry.com/ops/n8n
+  tag: 1.81.4
+imagePullSecrets:
+  - name: 8gears-registry-n8n
 
 # Global node selector for all components
 nodeSelector:
@@ -43,6 +43,25 @@ worker:
   config:
     executions:
       mode: queue
+  
+  # Worker probes (optional)
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 5678
+    initialDelaySeconds: 45
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+  
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 5678
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
 
 # Webhook configuration - simplified
 webhook:
@@ -58,6 +77,25 @@ webhook:
   config:
     executions:
       mode: queue
+  
+  # Webhook probes (optional)
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 5678
+    initialDelaySeconds: 45
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+  
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 5678
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
 
 # Main n8n instance configuration
 main:
@@ -84,6 +122,10 @@ main:
     security:
       audit:
         daysAbandonedWorkflow: 90
+    
+    # N8N specific settings
+    n8n:
+      hide_usage_page: true
   
   # Secrets configuration
   secret:
@@ -106,6 +148,27 @@ main:
     type: NodePort
     port: 5678
     nodePort: 30200
+  
+  # Liveness and Readiness Probes configuration
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 5678
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+    successThreshold: 1
+  
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 5678
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
 
 # Disable ingress for local setup
 ingress:
