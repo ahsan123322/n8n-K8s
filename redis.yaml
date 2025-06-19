@@ -18,8 +18,8 @@ scaling:
     replicaCount: 1
   # For external Redis (if you prefer)
   redis:
-    host: "your-redis-host"
-    password: "your-redis-password"
+    host: "redis-hostname"
+    password: "redis-password-if-set"
 # Worker configuration (inherits from main but can override)
 worker:
   enabled: true
@@ -42,7 +42,7 @@ webhook:
       memory: 256Mi
 # Enable internal Valkey/Redis server for queue
 valkey:
-  enabled: true
+  enabled: false
 main:
   config:
     db:
@@ -164,5 +164,13 @@ extraManifests:
           - name: postgres-storage
             emptyDir: {}
 
-apiVersion: v1 kind: Service metadata: name: postgres-service spec: selector: app: postgres ports:
-port: 5432 targetPort: 5432
+ - apiVersion: v1
+    kind: Service
+    metadata:
+      name: postgres-service
+    spec:
+      selector:
+        app: postgres
+      ports:
+      - port: 5432
+        targetPort: 5432
