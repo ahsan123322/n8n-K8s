@@ -1,0 +1,168 @@
+# Simplified prod setup with standard PostgreSQL and NodePort
+# Following 8gears/n8n-helm-chart standard format
+image:
+  repository: 8gears.container-registry.com/ops/n8n
+  tag: 1.81.4
+imagePullSecrets:
+  - name: 8gears-registry-n8n
+# Global node selector for all components
+nodeSelector:
+  server: n8n
+# Enable scaling for queue mode with webhook instances
+scaling:
+  enabled: true
+  worker:
+    replicaCount: 3
+  webhook:
+    enabled: true
+    replicaCount: 1
+  # For external Redis (if you prefer)
+  redis:
+    host: "your-redis-host"
+    password: "your-redis-password"
+# Worker configuration (inherits from main but can override)
+worker:
+  enabled: true
+  nodeSelector:
+    server: n8n
+  resources:
+    limits:
+      memory: 1536Mi
+    requests:
+      memory: 256Mi
+# Webhook configuration (inherits from main but can override)
+webhook:
+  enabled: true
+  nodeSelector:
+    server: n8n
+  resources:
+    limits:
+      memory: 1024Mi
+    requests:
+      memory: 256Mi
+# Enable internal Valkey/Redis server for queue
+valkey:
+  enabled: true
+main:
+  config:
+    db:
+      type: postgresdb
+      postgresdb:
+        host: postgres-service
+        user: n8n
+        password: n8n_password
+        database: n8n
+        pool:
+          size: 10
+        ssl:
+          enabled: false
+  secret:
+    n8n:
+      encryption_key: "your-secure-encryption-key-here"
+
+  resources:
+    limits:
+      memory: 2048Mi
+    requests:
+      memory: 512Mi
+
+  # Apply node selector to main pods
+  nodeSelector:
+    server: n8n
+
+  # Service configuration with NodePort for direct access
+  service:
+    type: NodePort
+    port: 5678
+    nodePort: 30200
+# Disable ingress for local setup
+ingress:
+  enabled: false
+# External Redis deployment manifest
+extraManifests:
+  # Redis server for external queue management
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: redis-external
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: redis-external
+      template:
+        metadata:
+          labels:
+            app: redis-external
+        spec:
+          containers:
+          - name: redis
+            image: redis:7-alpine
+            args:
+            - redis-server
+            - --requirepass
+            - redis-password-if-set
+            ports:
+            - containerPort: 6379
+            resources:
+              requests:
+                memory: "256Mi"
+              limits:
+                memory: "512Mi"
+            volumeMounts:
+            - name: redis-storage
+              mountPath: /data
+          volumes:
+          - name: redis-storage
+            emptyDir: {}
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: redis-hostname
+    spec:
+      selector:
+        app: redis-external
+      ports:
+      - port: 6379
+        targetPort: 6379
+  # PostgreSQL database
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: postgres
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: postgres
+      template:
+        metadata:
+          labels:
+            app: postgres
+        spec:
+          containers:
+          - name: postgres
+            image: postgres:15
+            env:
+            - name: POSTGRES_DB
+              value: n8n
+            - name: POSTGRES_USER
+              value: n8n
+            - name: POSTGRES_PASSWORD
+              value: n8n_password
+            ports:
+            - containerPort: 5432
+            resources:
+              requests:
+                memory: "512Mi"
+              limits:
+                memory: "512Mi"
+            volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          volumes:
+          - name: postgres-storage
+            emptyDir: {}
+
+apiVersion: v1 kind: Service metadata: name: postgres-service spec: selector: app: postgres ports:
+port: 5432 targetPort: 5432
