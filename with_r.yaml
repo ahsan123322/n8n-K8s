@@ -1,0 +1,180 @@
+# N8N Helm Chart Configuration with External Redis
+# Following 8gears/n8n-helm-chart standard format v1.0.0+
+
+# image:
+#   repository: 8gears.container-registry.com/ops/n8n
+#   tag: 1.81.4
+# imagePullSecrets:
+#   - name: 8gears-registry-n8n
+
+# Global node selector for all components
+nodeSelector:
+  server: n8n
+
+# Enable scaling for queue mode with multiple workers
+scaling:
+  enabled: true
+  worker:
+    replicaCount: 3
+  webhook:
+    enabled: false  # Disabled as requested
+
+# Disable INTERNAL Redis - using external Redis
+redis:
+  enabled: false
+
+# Disable Valkey as well
+valkey:
+  enabled: false
+
+# External Redis configuration
+externalRedis:
+  enabled: true
+  host: redis-service
+  port: 6379
+  password: redis_password
+  database: 0
+
+# Worker configuration with external Redis
+worker:
+  enabled: true
+  nodeSelector:
+    server: n8n
+  resources:
+    limits:
+      memory: 1536Mi
+    requests:
+      memory: 256Mi
+  
+  # Worker config for queue mode with external Redis
+  config:
+    executions:
+      mode: queue
+    redis:
+      host: redis-service
+      port: 6379
+      password: redis_password
+      db: 0
+  
+  # Worker probes
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 5678
+    initialDelaySeconds: 45
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+  
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 5678
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# Webhook disabled as requested
+webhook:
+  enabled: false
+
+# Main n8n instance configuration
+main:
+  config:
+    # Database configuration - PostgreSQL external
+    db:
+      type: postgresdb
+      postgresdb:
+        host: postgres-service
+        port: 5432
+        user: n8n
+        password: n8n_password
+        database: n8n
+        pool:
+          max: 10
+        ssl:
+          enabled: false
+    
+    # Queue configuration with external Redis
+    executions:
+      mode: queue
+    
+    # Redis configuration for main instance
+    redis:
+      host: redis-service
+      port: 6379
+      password: redis_password
+      db: 0
+    
+    # Queue settings
+    queue:
+      bull:
+        redis:
+          host: redis-service
+          port: 6379
+          password: redis_password
+          db: 0
+    
+    # Security
+    security:
+      audit:
+        daysAbandonedWorkflow: 90
+    
+    # N8N specific settings
+    n8n:
+      hide_usage_page: true
+  
+  # Secrets configuration
+  secret:
+    n8n:
+      encryption_key: "your-secure-encryption-key-here"
+  
+  # Resource limits
+  resources:
+    limits:
+      memory: 2048Mi
+    requests:
+      memory: 512Mi
+  
+  # Node selector
+  nodeSelector:
+    server: n8n
+  
+  # Service configuration with NodePort
+  service:
+    type: NodePort
+    port: 5678
+    nodePort: 30200
+  
+  # Liveness and Readiness Probes configuration
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 5678
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+    successThreshold: 1
+  
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 5678
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+
+# Disable ingress for local setup
+ingress:
+  enabled: false
+
+# Environment variables for Redis connection (alternative approach)
+env:
+  N8N_REDIS_HOST: redis-service
+  N8N_REDIS_PORT: "6379"
+  N8N_REDIS_PASSWORD: redis_password
+  N8N_REDIS_DB: "0"
