@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n-nodeport-service
+  namespace: default  # Change to your namespace
+  labels:
+    app: n8n
+    component: main
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 5678        # Service port
+      targetPort: 5678  # Pod port
+      nodePort: 30200   # External access port (change as needed)
+      protocol: TCP
+  selector:
+    app: n8n
+    component: main 
