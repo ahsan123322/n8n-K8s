@@ -56,6 +56,11 @@ worker:
       password: redis_password
       db: 0
   
+  # ADD ENCRYPTION KEY FOR WORKERS
+  secret:
+    n8n:
+      encryption_key: "your-secure-encryption-key-here"
+  
   # Worker probes
   livenessProbe:
     httpGet:
@@ -178,3 +183,5 @@ env:
   N8N_REDIS_PORT: "6379"
   N8N_REDIS_PASSWORD: redis_password
   N8N_REDIS_DB: "0"
+  # Add encryption key as environment variable for all components
+  N8N_ENCRYPTION_KEY: "your-secure-encryption-key-here"
